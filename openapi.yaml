@@ -1,0 +1,477 @@
+openapi: '3.1.0'
+info:
+  title: Fund Transfer API
+  description: |
+    RESTful API for inter-account fund transfers with idempotency,
+    double-entry bookkeeping, and comprehensive audit trails.
+
+    ## Authentication
+    All endpoints require API key authentication via the `X-API-KEY` header.
+
+    ## Idempotency
+    Transfer creation is idempotent — repeating a POST with the same
+    `idempotency_key` returns the original transaction without side effects.
+
+    ## Currency
+    Only same-currency transfers are supported. Both accounts and the
+    request currency must match (ISO 4217). Cross-currency (FX) transfers
+    are explicitly out-of-scope.
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - apiKey: []
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: API key for authentication
+
+  schemas:
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: '019573a2-1c2d-7e4a-b5f0-123456789abc'
+        account_number:
+          type: string
+          example: 'FT000123456789'
+          description: Human-readable external account identifier
+        owner_name:
+          type: string
+          example: 'Jane Doe'
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: 'USD'
+          description: ISO 4217 currency code
+        balance:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          example: '10000.0000'
+        active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        source_account_id:
+          type: string
+          format: uuid
+        destination_account_id:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          pattern: '^\d+\.\d{1,4}$'
+          example: '500.0000'
+        fee_amount:
+          type: string
+          example: '0.0000'
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        description:
+          type: string
+          nullable: true
+        failure_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    CreateAccountRequest:
+      type: object
+      required: [owner_name, currency]
+      properties:
+        owner_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          description: ISO 4217 currency code
+        initial_balance:
+          type: string
+          pattern: '^\d+(\.\d{1,4})?$'
+          default: '0.0000'
+
+    CreateTransferRequest:
+      type: object
+      required: [source_account_id, destination_account_id, amount, currency, idempotency_key]
+      properties:
+        source_account_id:
+          type: string
+          format: uuid
+        destination_account_id:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{1,4})?$'
+          example: '100.00'
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        idempotency_key:
+          type: string
+          maxLength: 255
+          description: Client-generated unique key to ensure at-most-once processing
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+
+paths:
+  /api/accounts:
+    post:
+      operationId: createAccount
+      summary: Create a new account
+      tags: [Accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid API key
+
+    get:
+      operationId: listAccounts
+      summary: List all accounts owned by the caller
+      tags: [Accounts]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /api/accounts/{id}:
+    get:
+      operationId: getAccount
+      summary: Get account details
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          description: Account not found
+
+    patch:
+      operationId: updateAccount
+      summary: Update account owner name
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner_name]
+              properties:
+                owner_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+      responses:
+        '200':
+          description: Account updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: Validation failed
+        '404':
+          description: Account not found
+
+    delete:
+      operationId: deactivateAccount
+      summary: Deactivate account (soft delete)
+      description: Account must have zero balance to be deactivated.
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Account deactivated
+        '404':
+          description: Account not found
+        '422':
+          description: Account has non-zero balance
+
+  /api/accounts/{id}/transactions:
+    get:
+      operationId: listAccountTransactions
+      summary: List transactions for an account
+      tags: [Accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '404':
+          description: Account not found
+
+  /api/transfers:
+    post:
+      operationId: createTransfer
+      summary: Initiate a fund transfer
+      description: |
+        Transfers funds from source to destination account.
+
+        **Idempotency:** Repeating a request with the same `idempotency_key`
+        returns the original transaction without side effects.
+
+        **Constraints:**
+        - Source and destination must be different accounts
+        - Both accounts must be active and owned by the caller (source only)
+        - All three currencies (source, destination, request) must match
+        - Amount must be between the configured minimum and maximum
+        - Daily transfer limit per account must not be exceeded
+        - Source must have sufficient balance (including fee)
+      tags: [Transfers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferRequest'
+      responses:
+        '201':
+          description: Transfer completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller does not own the source account, or compliance violation
+        '404':
+          description: Source or destination account not found
+        '409':
+          description: Duplicate idempotency key with different payload
+        '422':
+          description: |
+            Business rule violation (insufficient funds, currency mismatch,
+            daily limit exceeded, same-account transfer)
+        '429':
+          description: Rate limit exceeded
+
+    get:
+      operationId: listTransfers
+      summary: List all transfers
+      tags: [Transfers]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of transfers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /api/transfers/{id}:
+    get:
+      operationId: getTransfer
+      summary: Get transfer details
+      tags: [Transfers]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transfer details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Invalid transaction ID format
+        '404':
+          description: Transaction not found or not owned by caller
+
+  /api/health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Service is healthy

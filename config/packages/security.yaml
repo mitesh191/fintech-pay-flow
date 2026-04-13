@@ -1,0 +1,36 @@
+security:
+    providers:
+        api_key_provider:
+            id: App\Security\ApiKeyUserProvider
+
+    firewalls:
+        # Dev tooling and static assets — no security
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        # Health check is intentionally unauthenticated — used by load-balancers
+        health:
+            pattern: ^/health
+            security: false
+
+        # All API endpoints require a valid Bearer token
+        api:
+            pattern: ^/
+            stateless: true
+            provider: api_key_provider
+            custom_authenticators:
+                - App\Security\ApiKeyAuthenticator
+
+    access_control:
+        - { path: ^/health, roles: PUBLIC_ACCESS }
+        - { path: ^/api,    roles: ROLE_API_CLIENT }
+
+when@test:
+    security:
+        # Keep security fully active in tests — integration tests must prove
+        # that auth actually works end-to-end, not that we bypassed it.
+        providers:
+            api_key_provider:
+                id: App\Security\ApiKeyUserProvider
+

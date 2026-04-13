@@ -1,0 +1,71 @@
+monolog:
+    channels:
+        - deprecation
+        - transfers
+
+when@dev:
+    monolog:
+        handlers:
+            main:
+                type: stream
+                path: '%kernel.logs_dir%/%kernel.environment%.log'
+                level: debug
+                channels: ['!event']
+            transfers:
+                type: stream
+                path: '%kernel.logs_dir%/transfers.log'
+                level: info
+                channels: [transfers]
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ['!event', '!doctrine', '!console']
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ['!event']
+            nested:
+                type: stream
+                path: '%kernel.logs_dir%/%kernel.environment%.log'
+                level: debug
+
+when@prod:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                buffer_size: 50
+            nested:
+                type: stream
+                path: php://stderr
+                level: debug
+                formatter: monolog.formatter.json
+            transfers:
+                type: stream
+                path: '%kernel.logs_dir%/transfers.log'
+                level: info
+                channels: [transfers]
+                formatter: monolog.formatter.json
+            # Dedicated handler so warning-level API failures (4xx domain/auth errors)
+            # are always written immediately to stderr, bypassing fingers_crossed
+            # which would otherwise discard them on clean 4xx responses.
+            api_failures:
+                type: stream
+                path: php://stderr
+                level: warning
+                formatter: monolog.formatter.json
+                channels: ['!event', '!doctrine', '!console', '!deprecation']
+            deprecation:
+                type: stream
+                path: php://stderr
+                level: debug
+                channels: [deprecation]

@@ -1,0 +1,107 @@
+services:
+
+  # ── PHP-FPM application ──────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: fund_transfer_app
+    volumes:
+      - .:/var/www
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: 1
+      APP_SECRET: cbae2066073eeaa00d198fa6f55d48e5
+      DATABASE_URL: "mysql://app_user:app_pass@db:3306/fund_transfer?serverVersion=8.0.0&charset=utf8mb4"
+      REDIS_URL: "redis://redis:6379"
+      LOCK_DSN: flock
+      RATE_LIMIT_TRANSFER: "60"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Nginx reverse proxy ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: fund_transfer_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+  # ── MySQL 8 ──────────────────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: fund_transfer_db
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --innodb-buffer-pool-size=1G
+      --innodb-buffer-pool-instances=4
+      --innodb-log-file-size=256M
+      --innodb-flush-method=O_DIRECT
+      --innodb-flush-log-at-trx-commit=1
+      --innodb-io-capacity=2000
+      --innodb-io-capacity-max=4000
+      --max-connections=500
+      --thread-cache-size=50
+      --performance-schema=OFF
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: fund_transfer
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  # ── Redis 7 ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: fund_transfer_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # ── phpMyAdmin (optional DB admin UI) ────────────────────────────────────────
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: fund_transfer_phpmyadmin
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      # Fix: password must match MYSQL_ROOT_PASSWORD
+      PMA_PASSWORD: "root"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  redis_data:

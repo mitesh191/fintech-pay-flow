@@ -1,0 +1,141 @@
+parameters:
+    # Default daily transfer limit per account (overridden by DAILY_TRANSFER_LIMIT env var).
+    env(DAILY_TRANSFER_LIMIT): '50000.0000'
+    # Timezone for daily velocity window (e.g. 'America/New_York', 'Asia/Kolkata').
+    env(DAILY_LIMIT_TIMEZONE): 'UTC'
+    # Per-currency daily limits (JSON map). Overrides the default for specific currencies.
+    env(DAILY_LIMIT_BY_CURRENCY): '{}'
+    # Per-currency max transaction amounts (JSON map).
+    env(MAX_AMOUNT_BY_CURRENCY): '{}'
+    # Default max per-transaction amount.
+    env(MAX_TRANSACTION_AMOUNT): '100000.0000'
+    # Minimum per-transaction amount.
+    env(MIN_TRANSACTION_AMOUNT): '0.1000'
+    # Step-up SCA threshold — transfers above this amount require a second factor.
+    env(STEP_UP_THRESHOLD): '500.0000'
+    # Per-currency SCA thresholds (JSON map). PSD2 uses 30 EUR by default.
+    env(STEP_UP_THRESHOLD_BY_CURRENCY): '{}'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    # ── Repository interfaces ───────────────────────────────────────────────
+    App\Repository\ApiKeyRepositoryInterface:
+        alias: App\Repository\ApiKeyRepository
+
+    App\Repository\AccountRepositoryInterface:
+        alias: App\Repository\AccountRepository
+
+    App\Repository\TransactionRepositoryInterface:
+        alias: App\Repository\TransactionRepository
+
+    App\Repository\LedgerRepositoryInterface:
+        alias: App\Repository\LedgerRepository
+
+    App\Repository\OutboxEventRepositoryInterface:
+        alias: App\Repository\OutboxEventRepository
+
+    App\Repository\AuditLogRepositoryInterface:
+        alias: App\Repository\AuditLogRepository
+
+    # ── Service interfaces ──────────────────────────────────────────────────
+    App\Service\IdempotencyServiceInterface:
+        alias: App\Service\IdempotencyService
+
+    App\Service\TransferServiceInterface:
+        alias: App\Service\TransferService
+
+    App\Service\AccountServiceInterface:
+        alias: App\Service\AccountService
+
+    App\Service\ReversalServiceInterface:
+        alias: App\Service\ReversalService
+
+    App\Service\Fee\FeeCalculatorInterface:
+        alias: App\Service\Fee\ZeroFeeCalculator
+        # Swap to PercentageFeeCalculator to charge fees:
+        # alias: App\Service\Fee\PercentageFeeCalculator
+
+    App\Service\Audit\AuditLoggerInterface:
+        alias: App\Service\Audit\DatabaseAuditLogger
+
+    App\Service\Auth\StepUpAuthenticationInterface:
+        alias: App\Service\Auth\StubStepUpAuthentication
+        # Swap to a real SCA implementation for production:
+        # alias: App\Service\Auth\TotpStepUpAuthentication
+
+    # ── Transfer rule chain ─────────────────────────────────────────────────
+    # Rules execute in the order listed; lower index = runs first.
+    App\Service\Transfer\TransferRuleChain:
+        arguments:
+            $rules:
+                - '@App\Service\Transfer\Rule\TransfersKillSwitchRule'
+                - '@App\Service\Transfer\Rule\AccountActiveRule'
+                - '@App\Service\Transfer\Rule\AccountOwnershipRule'
+                - '@App\Service\Transfer\Rule\TransactionAmountLimitRule'
+                - '@App\Service\Transfer\Rule\CurrencyMismatchRule'
+                - '@App\Service\Transfer\Rule\DailyAmountLimitRule'
+                - '@App\Service\Transfer\Rule\StepUpRequiredRule'
+
+    App\Service\Transfer\Rule\DailyAmountLimitRule:
+        arguments:
+            # Override via .env: DAILY_TRANSFER_LIMIT=100000.0000
+            $defaultDailyLimit: '%env(DAILY_TRANSFER_LIMIT)%'
+            $dailyLimitByCurrency: '%env(json:DAILY_LIMIT_BY_CURRENCY)%'
+            $timezone: '%env(DAILY_LIMIT_TIMEZONE)%'
+
+    App\Service\Transfer\Rule\TransactionAmountLimitRule:
+        arguments:
+            $maxAmountByCurrency: '%env(json:MAX_AMOUNT_BY_CURRENCY)%'
+            $defaultMaxAmount: '%env(MAX_TRANSACTION_AMOUNT)%'
+            $minAmount: '%env(MIN_TRANSACTION_AMOUNT)%'
+
+    App\Service\Transfer\Rule\StepUpRequiredRule:
+        arguments:
+            $defaultThreshold: '%env(STEP_UP_THRESHOLD)%'
+            $thresholdByCurrency: '%env(json:STEP_UP_THRESHOLD_BY_CURRENCY)%'
+
+    # ── Compliance ──────────────────────────────────────────────────────────
+    App\Service\Compliance\ComplianceCheckInterface:
+        alias: App\Service\Compliance\StubComplianceCheck
+        # Swap to a real implementation for production:
+        # alias: App\Service\Compliance\RefinitivComplianceCheck
+
+    # ── Request context (request-scoped) ────────────────────────────────────
+    App\Service\RequestContext:
+        shared: true  # one instance per request (default)
+
+    # ── Infrastructure ──────────────────────────────────────────────────────
+    App\EventSubscriber\ExceptionSubscriber:
+        arguments:
+            $environment: '%kernel.environment%'
+
+    App\Controller\HealthController:
+        arguments:
+            $environment: '%kernel.environment%'
+
+    Predis\ClientInterface:
+        class: Predis\Client
+        arguments:
+            - '%env(REDIS_URL)%'
+
+    App\Service\TransferService:
+        arguments:
+            $logger: '@monolog.logger.transfers'
+
+    App\Service\ReversalService:
+        arguments:
+            $logger: '@monolog.logger.transfers'
+
+    App\Controller\TransferController:
+        arguments:
+            $transferLimiterFactory: '@limiter.transfer_limiter'

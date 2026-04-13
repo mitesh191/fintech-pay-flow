@@ -1,0 +1,5 @@
+/var/
+/vendor/
+.env.docker
+.env.local
+.env.*.local

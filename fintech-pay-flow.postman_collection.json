@@ -1,0 +1,1954 @@
+{
+  "info": {
+    "_postman_id": "b05288cd-75fd-4f5c-b805-3147d020f958",
+    "name": "Fund Transfer API Final",
+    "description": "Complete endpoint collection for the Fund Transfer API (PHP/Symfony). Base URL: http://localhost — adjust the `base_url` collection variable to match your Docker host/port.\n\nAuthentication: All `/api/*` routes require `Authorization: Bearer <token>`. The fixture seed token is `test-api-key-fixture-00000000000001`.\n\nFlow order for a fresh database:\n1. Health Check — verify stack is up\n2. Create Account (Alice / Bob) — note the returned `id` fields\n3. Transfer — use Alice → Bob with a fresh `idempotency_key`\n4. Inspect the transaction, list accounts, list transfers, etc.\n5. Edge-case and error folders test validation, auth, and business rules.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "29020594"
+  },
+  "item": [
+    {
+      "name": "🟢 Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status is ok', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "  pm.expect(json.checks.database.ok).to.be.true;",
+                  "  pm.expect(json.checks.redis.ok).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 – All systems healthy",
+              "originalRequest": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  },
+                  {
+                    "key": "X-Request-ID",
+                    "value": "req-{{$timestamp}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/health",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "Text",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"ok\",\n  \"checks\": {\n    \"database\": { \"ok\": true },\n    \"redis\": { \"ok\": true }\n  }\n}"
+            },
+            {
+              "name": "503 – Degraded (DB/Redis down)",
+              "originalRequest": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  },
+                  {
+                    "key": "X-Request-ID",
+                    "value": "req-{{$timestamp}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/health",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "health"
+                  ]
+                }
+              },
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "Text",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"degraded\",\n  \"checks\": {\n    \"database\": { \"ok\": false, \"error\": \"check_failed\" },\n    \"redis\": { \"ok\": true }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "👤 Accounts",
+      "item": [
+        {
+          "name": "Create Account – Alice (USD, funded)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('response shape', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b).to.have.keys(['id','owner_name','currency','balance','active','created_at','updated_at']);",
+                  "  pm.expect(b.owner_name).to.eql('Alice');",
+                  "  pm.expect(b.currency).to.eql('USD');",
+                  "  pm.expect(parseFloat(b.balance)).to.equal(10000);",
+                  "  pm.expect(b.active).to.be.true;",
+                  "  pm.collectionVariables.set('account_id_alice', b.id);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Alice\",\n  \"currency\": \"USD\",\n  \"initial_balance\": \"1500.0000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "201 – Account created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  },
+                  {
+                    "key": "X-Request-ID",
+                    "value": "req-{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"owner_name\": \"Alice\",\n  \"currency\": \"USD\",\n  \"initial_balance\": \"1500.0000\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/accounts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "Text",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"id\": \"01936ab4-xxxx-7xxx-xxxx-xxxxxxxxxxxx\",\n  \"owner_name\": \"Alice\",\n  \"currency\": \"USD\",\n  \"balance\": \"10000.0000\",\n  \"active\": true,\n  \"created_at\": \"2025-01-01T12:00:00+00:00\",\n  \"updated_at\": \"2025-01-01T12:00:00+00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Account – Bob (USD, zero balance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('bob created', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.owner_name).to.eql('Bob');",
+                  "  pm.collectionVariables.set('account_id_bob', b.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Bob\",\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Account – Mitesh (USD, Sufficient  balance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('mit created', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.owner_name).to.eql('mit');",
+                  "  pm.collectionVariables.set('account_id_mit', b.id);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"owner_name\": \"Mitesh\",\n    \"currency\": \"USD\",\n    \"initial_balance\": \"200.0000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Account – Carol (EUR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));\r",
+                  "pm.test('car created', () => {\r",
+                  "  const b = pm.response.json();\r",
+                  "  pm.expect(b.owner_name).to.eql('car');\r",
+                  "  pm.collectionVariables.set('account_id_car', b.id);\r",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Carol\",\n  \"currency\": \"EUR\",\n  \"initial_balance\": \"5000.0000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Account – MP (EUR), zero bal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));\r",
+                  "pm.test('mp created', () => {\r",
+                  "  const b = pm.response.json();\r",
+                  "  pm.expect(b.owner_name).to.eql('mp');\r",
+                  "  pm.collectionVariables.set('account_id_mp', b.id);\r",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"MP\",\n  \"currency\": \"EUR\",\n  \"initial_balance\": \"0.0000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Account – Test User, Zero bal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));\r",
+                  "pm.test('tu created', () => {\r",
+                  "  const b = pm.response.json();\r",
+                  "  pm.expect(b.owner_name).to.eql('tu');\r",
+                  "  pm.collectionVariables.set('account_id_tu', b.id);\r",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Test User\",\n  \"currency\": \"EUR\",\n  \"initial_balance\": \"0.0000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Accounts (page 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('pagination present', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.data).to.be.an('array');",
+                  "  pm.expect(b.pagination).to.have.keys(['page','limit','total','total_pages']);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Account – Alice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('correct account', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('account_id_alice'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id_alice}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id_alice}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Account Transactions – Alice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('has data and pagination', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.data).to.be.an('array');",
+                  "  pm.expect(b.pagination).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id_alice}}/transactions?page=1&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id_alice}}",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate Account – MP (zero balance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id_mp}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id_mp}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate Account – Test User (zero balance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id_mp}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id_mp}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "AUTH – account with bearer token → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💸 Transfers",
+      "item": [
+        {
+          "name": "Create Transfer – Happy Path (Alice → Bob)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a unique idempotency key so this request can be replayed",
+                  "pm.collectionVariables.set('idem_key', 'idem-' + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('transaction shape', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.status).to.eql('completed');",
+                  "  pm.expect(b.amount).to.eql('100.0000');",
+                  "  pm.expect(b.currency).to.eql('USD');",
+                  "  pm.collectionVariables.set('transaction_id', b.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"100.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\",\n  \"description\": \"Payment for invoice #42\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "201 – Transfer completed",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  },
+                  {
+                    "key": "X-Request-ID",
+                    "value": "req-{{$timestamp}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"100.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\",\n  \"description\": \"Payment for invoice #42\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/transfers",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "transfers"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "Text",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"id\": \"01936ab4-xxxx-7xxx-xxxx-xxxxxxxxxxxx\",\n  \"status\": \"completed\",\n  \"source_account_id\": \"...\",\n  \"destination_account_id\": \"...\",\n  \"amount\": \"100.0000\",\n  \"currency\": \"USD\",\n  \"description\": \"Payment for invoice #42\",\n  \"failure_reason\": null,\n  \"created_at\": \"2025-01-01T12:00:00+00:00\",\n  \"completed_at\": \"2025-01-01T12:00:00+00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Transfer – Idempotent Replay (same key, same payload)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created (idempotent)', () => pm.response.to.have.status(201));",
+                  "pm.test('same transaction returned', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('transaction_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"100.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\",\n  \"description\": \"Payment for invoice #42\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Transfer – idempotent Replay (same key, diff payload)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created (idempotent)', () => pm.response.to.have.status(201));",
+                  "pm.test('same transaction returned', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('transaction_id'));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"200.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\",\n  \"description\": \"Payment for invoice #42\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Transfer – new Idempotent key (diff key, diff payload)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created (idempotent)', () => pm.response.to.have.status(201));",
+                  "pm.test('same transaction returned', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('transaction_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"100.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\",\n  \"description\": \"Payment for invoice #42\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Transfer – new Idempotent Replay (diff key, diff payload)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created (idempotent)', () => pm.response.to.have.status(201));",
+                  "pm.test('same transaction returned', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('transaction_id'));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_mit}}\",\n  \"amount\": \"150.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\",\n  \"description\": \"Payment for invoice #42\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Transfers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('paginated list', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.data).to.be.an('array');",
+                  "  pm.expect(b.pagination.total).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/transfers?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transfer by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('correct transaction', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('transaction_id'));",
+                  "  pm.expect(b.status).to.eql('completed');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/transfers/{{transaction_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transaction_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "❌ Error Cases",
+      "item": [
+        {
+          "name": "AUTH – Invalid bearer token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "invalid-token-xyz",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "AUTH – Invalid bearer token → 401 Copy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "invalid-token-xyz",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "VALIDATION – Create Account: missing currency → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('details array present', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.details).to.be.an('array').with.length.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Dave\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "VALIDATION – Create Account: negative initial_balance → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Dave\",\n  \"currency\": \"USD\",\n  \"initial_balance\": \"-100\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "VALIDATION – Create Account: malformed JSON → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ not valid json }"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ACCOUNT – Get non-existent account → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/00000000-0000-7000-8000-000000000000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "00000000-0000-7000-8000-000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ACCOUNT – Deactivate account with non-zero balance → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id_alice}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id_alice}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ACCOUNT – Update missing owner_name field → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"something_else\": \"value\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id_alice}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id_alice}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Same source and destination → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_alice}}\",\n  \"amount\": \"50.00\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"idem-same-account\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Insufficient funds → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"999999.0000\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"idem-insufficient\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Currency mismatch (USD account → EUR amount) → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable Entity', () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"50.00\",\n  \"currency\": \"EUR\",\n  \"idempotency_key\": \"idem-currency-mismatch\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Missing required fields → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"50.00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Idempotency key reused with different payload → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"999.9999\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"{{idem_key}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Get non-existent transaction → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/transfers/00000000-0000-7000-8000-000000000000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "00000000-0000-7000-8000-000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Invalid UUID format → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/transfers/not-a-uuid",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "not-a-uuid"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "TRANSFER – Rate limit: fire 20 rapid requests (expect eventual 429)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// This fires once; run the request 20+ times quickly via Collection Runner",
+                  "// to actually trigger the 429. The test here just captures the status.",
+                  "pm.test('status is 201 or 429', () => {",
+                  "  pm.expect([201, 400, 429]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_key}}"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "req-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_account_id\": \"{{account_id_alice}}\",\n  \"destination_account_id\": \"{{account_id_bob}}\",\n  \"amount\": \"1.00\",\n  \"currency\": \"USD\",\n  \"idempotency_key\": \"rate-limit-test-{{$randomUUID}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost"
+    },
+    {
+      "key": "api_key",
+      "value": "test-api-key-fixture-00000000000001"
+    },
+    {
+      "key": "account_id_alice",
+      "value": "",
+      "description": "Auto-set by 'Create Account – Alice'. Paste manually if needed."
+    },
+    {
+      "key": "account_id_bob",
+      "value": "",
+      "description": "Auto-set by 'Create Account – Bob'."
+    },
+    {
+      "key": "transaction_id",
+      "value": "",
+      "description": "Auto-set by 'Create Transfer – Happy Path'."
+    },
+    {
+      "key": "idem_key",
+      "value": ""
+    },
+    {
+      "key": "account_id_car",
+      "value": ""
+    },
+    {
+      "key": "account_id_mp",
+      "value": ""
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+services:
+    App\Service\IdempotencyServiceInterface:
+        class: App\Service\NullIdempotencyService
