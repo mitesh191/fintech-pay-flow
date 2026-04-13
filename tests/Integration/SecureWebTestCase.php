@@ -32,7 +32,7 @@ abstract class SecureWebTestCase extends WebTestCase
     {
         parent::setUpBeforeClass();
 
-        static::$client = static::createClient();
+        static::bootKernel();
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
@@ -42,12 +42,30 @@ abstract class SecureWebTestCase extends WebTestCase
 
         $executor = new ORMExecutor($em, new ORMPurger($em));
         $executor->execute($loader->getFixtures());
+
+        static::ensureKernelShutdown();
     }
 
     protected function setUp(): void
     {
-        // Reset client between tests so cookies / headers do not leak.
-        static::$client->restart();
+        parent::setUp();
+
+        static::ensureKernelShutdown();
+        static::$client = static::createClient();
+    }
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+
+        static::ensureKernelShutdown();
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        static::ensureKernelShutdown();
+
+        parent::tearDownAfterClass();
     }
 
     /** Make an authenticated API request. */

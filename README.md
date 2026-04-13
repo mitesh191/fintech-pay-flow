@@ -79,6 +79,8 @@ php bin/phpunit --testsuite unit --no-coverage
 php bin/phpunit --testsuite integration --no-coverage
 ```
 
+When running tests from the host machine against the Dockerized services, MySQL is exposed on `127.0.0.1:13306` and Redis on `127.0.0.1:6379` via `.env.test`.
+
 Or via Make:
 
 ```bash

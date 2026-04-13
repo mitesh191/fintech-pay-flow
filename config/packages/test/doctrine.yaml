@@ -1,3 +1,3 @@
 doctrine:
     dbal:
-        url: 'mysql://app_user:app_pass@db:3306/fund_transfer?serverVersion=8.0.0&charset=utf8mb4'
+        url: '%env(resolve:DATABASE_URL)%'
