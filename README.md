@@ -43,29 +43,6 @@ Test API key: `test-api-key-fixture-00000000000001`
 
 ---
 
-## Quick Start — Local
-
-```bash
-# 1. Install dependencies
-composer install
-
-# 2. Configure environment
-cp .env.example .env.local
-# Edit .env.local — set DATABASE_URL and REDIS_URL
-
-# 3. Create database and run migrations
-php bin/console doctrine:database:create --if-not-exists
-php bin/console doctrine:migrations:migrate --no-interaction
-
-# 4. Load sample data
-php bin/console doctrine:fixtures:load --no-interaction
-
-# 5. Start the built-in server
-php -S 0.0.0.0:8000 -t public/
-```
-
----
-
 ## Running Tests
 
 ```bash
